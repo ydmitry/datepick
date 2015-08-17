@@ -1360,7 +1360,7 @@
 		/** Update the input field and any alternate field with the current dates.
 			@private
 			@param elem {Element} The control to use.
-			@param keyUp {boolean} <code>true</code> if coming from <code>keyUp</code> processing (internal). */
+			@param keyUp {boolean} <code>true</code> if coming from <code>keyUp</code> processing (internal).
 			@param silent {boolean} call onSelect or no / @MODIFICATION */
 		_updateInput: function(elem, keyUp, silent) {
 			var inst = this._getInst(elem);
