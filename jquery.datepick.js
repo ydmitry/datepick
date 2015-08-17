@@ -1076,7 +1076,8 @@
 			var trigger = inst.options.showTrigger;
 			inst.trigger = (!trigger ? $([]) :
 				$(trigger).clone().removeAttr('id').addClass(this._triggerClass)
-					[inst.options.isRTL ? 'insertBefore' : 'insertAfter'](elem).
+					//[inst.options.isRTL ? 'insertBefore' : 'insertAfter'](elem).
+					.insertAfter(elem).// RTL bugfix - for usage direction: rtl in markup
 					click(function() {
 						if (!plugin.isDisabled(elem[0])) {
 							plugin[plugin.curInst === inst ? 'hide' : 'show'](elem[0]);
@@ -1238,28 +1239,34 @@
 				inst.prevDate = plugin.newDate(inst.drawDate);
 				plugin.curInst = inst;
 				// Generate content
-				plugin._update(elem[0], true);
-				// Adjust position before showing
-				var offset = plugin._checkOffset(inst);
-				inst.div.css({left: offset.left, top: offset.top});
-				// And display
-				var showAnim = inst.options.showAnim;
-				var showSpeed = inst.options.showSpeed;
-				showSpeed = (showSpeed === 'normal' && $.ui &&
+				var deferred = plugin._update(elem[0], true);
+				deferred.done(function() {
+					// Adjust position before showing
+					var offset = plugin._checkOffset(inst);
+					inst.div.css({left: offset.left, top: offset.top});
+					// And display
+					var showAnim = inst.options.showAnim;
+					var showSpeed = inst.options.showSpeed;
+					showSpeed = (showSpeed === 'normal' && $.ui &&
 					parseInt($.ui.version.substring(2)) >= 8 ? '_default' : showSpeed);
-				if ($.effects && ($.effects[showAnim] || ($.effects.effect && $.effects.effect[showAnim]))) {
-					var data = inst.div.data(); // Update old effects data
-					for (var key in data) {
-						if (key.match(/^ec\.storage\./)) {
-							data[key] = inst._mainDiv.css(key.replace(/ec\.storage\./, ''));
+					if ($.effects && ($.effects[showAnim] || ($.effects.effect && $.effects.effect[showAnim]))) {
+						var data = inst.div.data(); // Update old effects data
+						for (var key in data) {
+							if (key.match(/^ec\.storage\./)) {
+								data[key] = inst._mainDiv.css(key.replace(/ec\.storage\./, ''));
+							}
 						}
+						inst.div.data(data).show(showAnim, inst.options.showOptions, showSpeed);
+					} else {
+						inst.div[showAnim || 'show'](showAnim ? showSpeed : 0);
 					}
-					inst.div.data(data).show(showAnim, inst.options.showOptions, showSpeed);
-				}
-				else {
-					inst.div[showAnim || 'show'](showAnim ? showSpeed : 0);
-				}
-			}
+				});
+
+
+
+
+
+
 		},
 
 		/** Extract possible dates from a string.
@@ -1308,7 +1315,8 @@
 			@param hidden {boolean} <code>true</code> to initially hide the datepicker. */
 		_update: function(elem, hidden) {
 			elem = $(elem.target || elem);
-			var inst = plugin._getInst(elem);
+			var inst = plugin._getInst(elem), callback, that = this, deferred = $.Deferred();
+
 			if (!$.isEmptyObject(inst)) {
 				if (inst.inline || plugin.curInst === inst) {
 					if ($.isFunction(inst.options.onChangeMonthYear) && (!inst.prevDate ||
@@ -1319,32 +1327,47 @@
 					}
 				}
 				if (inst.inline) {
-					var index = $('a, :input', elem).index($(':focus', elem));
-					elem.html(this._generateContent(elem[0], inst));
-					var focus = elem.find('a, :input');
-					focus.eq(Math.max(Math.min(index, focus.length - 1), 0)).focus();
+					callback = function() {
+						var index = $('a, :input', elem).index($(':focus', elem));
+						elem.html(this._generateContent(elem[0], inst));
+						var focus = elem.find('a, :input');
+						focus.eq(Math.max(Math.min(index, focus.length - 1), 0)).focus();
+						deferred.resolve();
+					};
 				}
 				else if (plugin.curInst === inst) {
 					if (!inst.div) {
 						inst.div = $('<div></div>').addClass(this._popupClass).
 							css({display: (hidden ? 'none' : 'static'), position: 'absolute',
+								'z-index': 1000000, // @MODIFICATION: added z-index to remove css rule for .datepick-popup to use css only in child element with pickerClass
 								left: elem.offset().left, top: elem.offset().top + elem.outerHeight()}).
 							appendTo($(inst.options.popupContainer || 'body'));
 						if ($.fn.mousewheel) {
 							inst.div.mousewheel(this._doMouseWheel);
 						}
 					}
-					inst.div.html(this._generateContent(elem[0], inst));
-					elem.focus();
+					callback = function() {
+						inst.div.html(this._generateContent(elem[0], inst));
+						elem.focus();
+						deferred.resolve();
+					};
+				}
+				
+				if (callback && $.isFunction(inst.options.beforeShow)) {
+					inst.options.beforeShow.apply(elem[0], [elem[0], inst, callback]);
+				} else if (callback) {
+					callback();
 				}
 			}
+			return deferred;
 		},
 
 		/** Update the input field and any alternate field with the current dates.
 			@private
 			@param elem {Element} The control to use.
 			@param keyUp {boolean} <code>true</code> if coming from <code>keyUp</code> processing (internal). */
-		_updateInput: function(elem, keyUp) {
+			@param silent {boolean} call onSelect or no / @MODIFICATION */
+		_updateInput: function(elem, keyUp, silent) {
 			var inst = this._getInst(elem);
 			if (!$.isEmptyObject(inst)) {
 				var value = '';
@@ -1362,7 +1385,8 @@
 					$(elem).val(value);
 				}
 				$(inst.options.altField).val(altValue);
-				if ($.isFunction(inst.options.onSelect) && !keyUp && !inst.inSelect) {
+				// @MODIFICATION: silent check added
+				if ($.isFunction(inst.options.onSelect) && !keyUp && !inst.inSelect && !silent) {
 					inst.inSelect = true; // Prevent endless loops
 					inst.options.onSelect.apply(elem, [inst.selectedDates]);
 					inst.inSelect = false;
@@ -1399,15 +1423,19 @@
 				isFixed |= $(this).css('position') === 'fixed';
 				return !isFixed;
 			});
+			var screenAlignment = inst.options.screenAlignment;
 			var scrollX = document.documentElement.scrollLeft || document.body.scrollLeft;
 			var scrollY = document.documentElement.scrollTop || document.body.scrollTop;
 			var above = offset.top - (isFixed ? scrollY : 0) - inst.div.outerHeight();
 			var below = offset.top - (isFixed ? scrollY : 0) + base.outerHeight();
 			var alignL = offset.left - (isFixed ? scrollX : 0);
 			var alignR = offset.left - (isFixed ? scrollX : 0) + base.outerWidth() - inst.div.outerWidth();
+			inst.div.css('position', isFixed ? 'fixed' : 'absolute');
 			var tooWide = (offset.left - scrollX + inst.div.outerWidth()) > browserWidth;
 			var tooHigh = (offset.top - scrollY + inst.elem.outerHeight() +
 				inst.div.outerHeight()) > browserHeight;
+			tooWide = tooWide && screenAlignment;
+			tooHigh = tooHigh && screenAlignment;
 			inst.div.css('position', isFixed ? 'fixed' : 'absolute');
 			var alignment = inst.options.alignment;
 			if (alignment === 'topLeft') {
@@ -1431,6 +1459,10 @@
 			}
 			offset.left = Math.max((isFixed ? 0 : scrollX), offset.left);
 			offset.top = Math.max((isFixed ? 0 : scrollY), offset.top);
+
+			if (offset.left + inst.div.outerWidth() > browserWidth) {
+				offset.left = browserWidth - inst.div.outerWidth();
+			}
 			return offset;
 		},
 
@@ -1674,10 +1706,11 @@
 			@param [endDate] {Date|number|string} the ending date for a range.
 			@param keyUp {boolean} <code>true</code> if coming from <code>keyUp</code> processing (internal).
 			@param setOpt {boolean} <code>true</code> if coming from option processing (internal).
+			@param silent {boolean} trigger onSelect or no
 			@example $(selector).datepick('setDate', new Date(2014, 12-1, 25))
  $(selector).datepick('setDate', '12/25/2014', '01/01/2015')
  $(selector).datepick('setDate', [date1, date2, date3]) */
-		setDate: function(elem, dates, endDate, keyUp, setOpt) {
+		setDate: function(elem, dates, endDate, keyUp, setOpt, silent) {
 			var inst = this._getInst(elem);
 			if (!$.isEmptyObject(inst)) {
 				if (!$.isArray(dates)) {
@@ -1725,7 +1758,8 @@
 					inst.get('defaultDate') || plugin.today()), inst);
 				if (!setOpt) {
 					this._update(elem);
-					this._updateInput(elem, keyUp);
+					// @MODIFICATION: added silent argument
+					this._updateInput(elem, keyUp, silent);
 				}
 			}
 		},
@@ -2129,12 +2163,42 @@
 			@param minDate {Date} The minimum date allowed.
 			@param maxDate {Date} The maximum date allowed.
 			@param monthHeader {string} The month/year format.
+		    @param renderer {object}
 			@return {string} The month selection content. */
-		_generateMonthSelection: function(inst, year, month, minDate, maxDate, monthHeader) {
+		_generateMonthSelection: function(inst, year, month, minDate, maxDate, monthHeader, renderer) {
 			if (!inst.options.changeMonth) {
 				return plugin.formatDate(
 					monthHeader, plugin.newDate(year, month, 1), inst.getConfig());
 			}
+
+			var monthNames = inst.options['monthNames' + (monthHeader.match(/mm/i) ? '' : 'Short')],
+				html, selector, m, y;
+
+			html = monthHeader.replace(/m+/i, '\\x2E').replace(/y+/i, '\\x2F');
+
+			if (inst.options.monthSingleSelect) {
+				var startYear = minDate ? parseInt(minDate.getFullYear()) : year,
+					endYear = maxDate ? parseInt(maxDate.getFullYear()) : year + 1;
+				selector = '<select class="' + this._monthYearClass +
+				'" title="' + inst.options.monthStatus + '">';
+
+				for (y = startYear; y <= endYear + 1; y++) {
+					for (m = 1; m <= 12; m++) {
+						if ((!minDate || plugin.newDate(y, m, plugin.daysInMonth(y, m)).
+								getTime() >= minDate.getTime()) &&
+							(!maxDate || plugin.newDate(y, m, 1).getTime() <= maxDate.getTime())) {
+							selector += '<option value="' + m + '/' + y + '"' +
+							((month === m && year == y) ? ' selected="selected"' : '') + '>' +
+							monthNames[m - 1] + ' ' + y + '</option>';
+						}
+					}
+				}
+
+				selector += '</select>';
+				html = html.replace(/\\x2E/, selector).replace(/\\x2F/, '');
+				return html;
+			}
+
 			// Months
 			var monthNames = inst.options['monthNames' + (monthHeader.match(/mm/i) ? '' : 'Short')];
 			var html = monthHeader.replace(/m+/i, '\\x2E').replace(/y+/i, '\\x2F');

@@ -1,0 +1,19 @@
+{
+  "name": "datepick",
+  "version": "5.0.1",
+  "description": "Fork from keithwood datepick",
+  "main": "jquery.datepick.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ydmitry/datepick.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ydmitry/datepick/issues"
+  },
+  "homepage": "https://github.com/ydmitry/datepick#readme"
+}
