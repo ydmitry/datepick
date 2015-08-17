@@ -1322,13 +1322,13 @@
 					}
 				}
 				if (inst.inline) {
-					callback = function() {
+					callback = $.proxy(function() {
 						var index = $('a, :input', elem).index($(':focus', elem));
 						elem.html(this._generateContent(elem[0], inst));
 						var focus = elem.find('a, :input');
 						focus.eq(Math.max(Math.min(index, focus.length - 1), 0)).focus();
 						deferred.resolve();
-					};
+					}, this);
 				}
 				else if (plugin.curInst === inst) {
 					if (!inst.div) {
@@ -1341,11 +1341,11 @@
 							inst.div.mousewheel(this._doMouseWheel);
 						}
 					}
-					callback = function() {
+					callback = $.proxy(function() {
 						inst.div.html(this._generateContent(elem[0], inst));
 						elem.focus();
 						deferred.resolve();
-					};
+					}, this);
 				}
 				
 				if (callback && $.isFunction(inst.options.beforeShow)) {
