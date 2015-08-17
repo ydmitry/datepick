@@ -1261,12 +1261,7 @@
 						inst.div[showAnim || 'show'](showAnim ? showSpeed : 0);
 					}
 				});
-
-
-
-
-
-
+			}
 		},
 
 		/** Extract possible dates from a string.
